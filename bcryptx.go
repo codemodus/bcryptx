@@ -32,16 +32,14 @@ var (
 type Options struct {
 	GenQuickMaxTime  time.Duration
 	GenStrongMaxTime time.Duration
-	ManualQuickCost  int
-	ManualStrongCost int
 	GenConcurrency   int
 }
 
 // Bcrypter holds
 type Bcrypter struct {
-	mu       *sync.RWMutex
-	tuningWg *sync.WaitGroup
-	*Options
+	mu         *sync.RWMutex
+	tuningWg   *sync.WaitGroup
+	Options    *Options
 	quickCost  int
 	strongCost int
 	concCount  chan bool
@@ -74,22 +72,7 @@ func New(opts *Options) *Bcrypter {
 func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error) {
 	bc.concCount <- true
 	defer func() { <-bc.concCount }()
-
-	bc.tuningWg.Wait()
-	bc.mu.RLock()
-	c := bc.ManualStrongCost
-	if c == 0 {
-		c = bc.quickCost
-	}
-	bc.mu.RUnlock()
-
-	if c == 0 {
-		bc.Tune()
-		bc.mu.RLock()
-		c = bc.quickCost
-		bc.mu.RUnlock()
-	}
-
+	c := bc.GetCurrentQuickCost()
 	b, err := bcrypt.GenerateFromPassword([]byte(pass), c)
 	return string(b), err
 }
@@ -98,22 +81,7 @@ func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error) {
 func (bc *Bcrypter) GenStrongFromPass(pass string) (string, error) {
 	bc.concCount <- true
 	defer func() { <-bc.concCount }()
-
-	bc.tuningWg.Wait()
-	bc.mu.RLock()
-	c := bc.ManualStrongCost
-	if c == 0 {
-		c = bc.strongCost
-	}
-	bc.mu.RUnlock()
-
-	if c == 0 {
-		bc.Tune()
-		bc.mu.RLock()
-		c = bc.strongCost
-		bc.mu.RUnlock()
-	}
-
+	c := bc.GetCurrentStrongCost()
 	b, err := bcrypt.GenerateFromPassword([]byte(pass), c)
 	return string(b), err
 }
@@ -126,30 +94,51 @@ func (bc *Bcrypter) CompareHashAndPass(hash, pass string) error {
 
 // Tune wraps tune so that Bcrypter.tuningWg is surely used.
 func (bc *Bcrypter) Tune() {
+	bc.tuningWg.Wait()
 	bc.tuningWg.Add(1)
 	bc.tune(bc.tuningWg)
 }
 
 // IsCostQuick returns the results of testHash with Bcrypter.quickCost.
 func (bc *Bcrypter) IsCostQuick(hash string) error {
-	bc.mu.RLock()
-	c := bc.ManualQuickCost
-	if c == 0 {
-		c = bc.quickCost
-	}
-	bc.mu.RUnlock()
+	c := bc.GetCurrentQuickCost()
 	return testHash(hash, c)
 }
 
 // IsCostStrong returns the results of testHash with Bcrypter.strongCost.
 func (bc *Bcrypter) IsCostStrong(hash string) error {
-	bc.mu.RLock()
-	c := bc.ManualStrongCost
-	if c == 0 {
-		c = bc.strongCost
-	}
-	bc.mu.RUnlock()
+	c := bc.GetCurrentStrongCost()
 	return testHash(hash, c)
+}
+
+func (bc *Bcrypter) GetCurrentQuickCost() int {
+	bc.tuningWg.Wait()
+	bc.mu.RLock()
+	c := bc.quickCost
+	bc.mu.RUnlock()
+
+	if c == 0 {
+		bc.Tune()
+		bc.mu.RLock()
+		c = bc.quickCost
+		bc.mu.RUnlock()
+	}
+	return c
+}
+
+func (bc *Bcrypter) GetCurrentStrongCost() int {
+	bc.tuningWg.Wait()
+	bc.mu.RLock()
+	c := bc.strongCost
+	bc.mu.RUnlock()
+
+	if c == 0 {
+		bc.Tune()
+		bc.mu.RLock()
+		c = bc.strongCost
+		bc.mu.RUnlock()
+	}
+	return c
 }
 
 // tune returns any test hash processing errors.
@@ -182,10 +171,10 @@ func (bc *Bcrypter) tune(wg *sync.WaitGroup) {
 	}
 
 	for k := range cts {
-		if qc == 0 && len(cts) > k+1 && cts[k+1] > bc.GenQuickMaxTime {
+		if qc == 0 && len(cts) > k+1 && cts[k+1] > bc.Options.GenQuickMaxTime {
 			qc = k
 		}
-		if sc == 0 && len(cts) > k+1 && cts[k+1] > bc.GenStrongMaxTime {
+		if sc == 0 && len(cts) > k+1 && cts[k+1] > bc.Options.GenStrongMaxTime {
 			sc = k
 		}
 	}

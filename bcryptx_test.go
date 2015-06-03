@@ -19,12 +19,13 @@ var (
 )
 
 func Example() {
-	bcxOpts := & bcryptx.Options{
-		GenQuickMaxTime: time.Millisecond * 400,
+	bcxOpts := &bcryptx.Options{
+		GenQuickMaxTime:  time.Millisecond * 400,
 		GenStrongMaxTime: time.Millisecond * 1600,
-		GenConcurrency: 1,
+		GenConcurrency:   1,
 	}
 
+	// To use defaults, provide nil instead of a bcryptx.Options object.
 	bcx := bcryptx.New(bcxOpts)
 	bcx.Tune()
 
@@ -46,19 +47,39 @@ func Example() {
 	// Hashed quick, wanted strong.
 }
 
-func TestNilSetupNoTune(t *testing.T) {
+func TestNilSetupNoTuneWithHelpers(t *testing.T) {
 	bcx := bcryptx.New(nil)
-	if _, err := bcx.GenQuickFromPass(testPass); err != nil {
+	h1, err := bcx.GenQuickFromPass(testPass)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if err = bcx.CompareHashAndPass(h1, testPass); err != nil {
+		t.Fatal(err)
+	}
+	if err = bcx.IsCostQuick(h1); err != nil {
+		t.Fatal(err)
+	}
+	if err = bcx.IsCostQuick(testPass); err == nil {
+		t.Fatal(errNoErr)
 	}
 
 	bcx = bcryptx.New(nil)
-	if _, err := bcx.GenStrongFromPass(testPass); err != nil {
+	h2, err := bcx.GenStrongFromPass(testPass)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if err = bcx.CompareHashAndPass(h2, testPass); err != nil {
+		t.Fatal(err)
+	}
+	if err = bcx.IsCostStrong(h2); err != nil {
+		t.Fatal(err)
+	}
+	if err = bcx.IsCostStrong(h1); err == nil {
+		t.Fatal(errNoErr)
 	}
 }
 
-func TestNilSetup(t *testing.T) {
+func TestNilSetupHashTimes(t *testing.T) {
 	bcx := bcryptx.New(nil)
 	bcx.Tune()
 
@@ -87,7 +108,7 @@ func TestNilSetup(t *testing.T) {
 	}
 }
 
-func TestCustomSetup(t *testing.T) {
+func TestCustomTimeSetup(t *testing.T) {
 	var tests = []struct {
 		qt time.Duration
 		st time.Duration
@@ -128,38 +149,5 @@ func TestCustomSetup(t *testing.T) {
 		if got < wantLow || got > wantHigh {
 			t.Errorf(errFmtGotWant, got, wantLow, wantHigh)
 		}
-	}
-}
-
-func TestCompareAndCosts(t *testing.T) {
-	bcx := bcryptx.New(nil)
-	bcx.Tune()
-
-	h1, err := bcx.GenQuickFromPass(testPass)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = bcx.CompareHashAndPass(h1, testPass); err != nil {
-		t.Fatal(err)
-	}
-	if err = bcx.IsCostQuick(h1); err != nil {
-		t.Fatal(err)
-	}
-	if err = bcx.IsCostQuick(testPass); err == nil {
-		t.Fatal(errNoErr)
-	}
-
-	h2, err := bcx.GenStrongFromPass(testPass)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = bcx.CompareHashAndPass(h2, testPass); err != nil {
-		t.Fatal(err)
-	}
-	if err = bcx.IsCostStrong(h2); err != nil {
-		t.Fatal(err)
-	}
-	if err = bcx.IsCostStrong(h1); err == nil {
-		t.Fatal(errNoErr)
 	}
 }

@@ -72,7 +72,7 @@ func New(opts *Options) *Bcrypter {
 func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error) {
 	bc.concCount <- true
 	defer func() { <-bc.concCount }()
-	c := bc.GetCurrentQuickCost()
+	c := bc.CurrentQuickCost()
 	b, err := bcrypt.GenerateFromPassword([]byte(pass), c)
 	return string(b), err
 }
@@ -81,7 +81,7 @@ func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error) {
 func (bc *Bcrypter) GenStrongFromPass(pass string) (string, error) {
 	bc.concCount <- true
 	defer func() { <-bc.concCount }()
-	c := bc.GetCurrentStrongCost()
+	c := bc.CurrentStrongCost()
 	b, err := bcrypt.GenerateFromPassword([]byte(pass), c)
 	return string(b), err
 }
@@ -101,17 +101,17 @@ func (bc *Bcrypter) Tune() {
 
 // IsCostQuick returns the results of testHash with Bcrypter.quickCost.
 func (bc *Bcrypter) IsCostQuick(hash string) error {
-	c := bc.GetCurrentQuickCost()
+	c := bc.CurrentQuickCost()
 	return testHash(hash, c)
 }
 
 // IsCostStrong returns the results of testHash with Bcrypter.strongCost.
 func (bc *Bcrypter) IsCostStrong(hash string) error {
-	c := bc.GetCurrentStrongCost()
+	c := bc.CurrentStrongCost()
 	return testHash(hash, c)
 }
 
-func (bc *Bcrypter) GetCurrentQuickCost() int {
+func (bc *Bcrypter) CurrentQuickCost() int {
 	bc.tuningWg.Wait()
 	bc.mu.RLock()
 	c := bc.quickCost
@@ -126,7 +126,7 @@ func (bc *Bcrypter) GetCurrentQuickCost() int {
 	return c
 }
 
-func (bc *Bcrypter) GetCurrentStrongCost() int {
+func (bc *Bcrypter) CurrentStrongCost() int {
 	bc.tuningWg.Wait()
 	bc.mu.RLock()
 	c := bc.strongCost

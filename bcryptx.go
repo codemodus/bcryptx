@@ -1,4 +1,10 @@
-// Package bcryptx ....
+// Package bcryptx automates the tuning of bcrypt costs based on an
+// environment's available processing resources.  Concurrency throttling is
+// provided, as well as convenience functions for making use of tuned costs
+// with bcrypt functions.
+//
+// quickCost should be used when a hash should be accessible quickly.
+// strongCost should be used when the delay of processing can be mitigated.
 package bcryptx
 
 import (
@@ -10,11 +16,15 @@ import (
 )
 
 const (
-	// GenQuickMaxTime is the default max time used for tuning Bcrypter.quickCost.
+	// GenQuickMaxTime is the default max time used for tuning
+	// Bcrypter.quickCost.
 	GenQuickMaxTime = time.Millisecond * 500
-	// GenStrongMaxTime is the default max time used for tuning Bcrypter.strongCost.
+
+	// GenStrongMaxTime is the default max time used for tuning
+	// Bcrypter.strongCost.
 	GenStrongMaxTime = time.Millisecond * 2000
-	// GenConcurrency is the default concurrency value used for Gen*FromPass.
+
+	// GenConcurrency is the default goroutine count used for Gen*FromPass.
 	GenConcurrency = 2
 
 	minCost    = bcrypt.MinCost
@@ -30,12 +40,18 @@ var (
 
 // Options holds values to be passed to New.
 type Options struct {
+	// GenQuickMaxTime is the max time used for tuning Bcrypter.quickCost.
 	GenQuickMaxTime  time.Duration
+
+	// GenStrongMaxTime is the max time used for tuning Bcrypter.strongCost.
 	GenStrongMaxTime time.Duration
+
+	// GenConcurrency is the goroutine count used for Gen*FromPass.
 	GenConcurrency   int
 }
 
-// Bcrypter holds
+// Bcrypter provides an API for bcrypt functions with "quick" or "strong" costs.
+// Tune is called on first use of Gen*FromPass if not already called directly.
 type Bcrypter struct {
 	mu         *sync.RWMutex
 	tuningWg   *sync.WaitGroup
@@ -45,7 +61,7 @@ type Bcrypter struct {
 	concCount  chan bool
 }
 
-// New returns a *Bcrypter based on Options values or defaults.
+// New returns a new Bcrypter based on Options values or defaults.
 func New(opts *Options) *Bcrypter {
 	if opts == nil {
 		opts = &Options{}
@@ -68,7 +84,8 @@ func New(opts *Options) *Bcrypter {
 	}
 }
 
-// GenQuickFromPass returns a hash produced using Bcrypter.quickCost.
+// GenQuickFromPass returns a hash produced using Bcrypter.quickCost or any
+// error encountered during handling.
 func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error) {
 	bc.concCount <- true
 	defer func() { <-bc.concCount }()
@@ -77,7 +94,8 @@ func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error) {
 	return string(b), err
 }
 
-// GenStrongFromPass returns a hash produced using Bcrypter.strongCost.
+// GenStrongFromPass returns a hash produced using Bcrypter.strongCost or any
+// error encountered during handling.
 func (bc *Bcrypter) GenStrongFromPass(pass string) (string, error) {
 	bc.concCount <- true
 	defer func() { <-bc.concCount }()
@@ -86,31 +104,32 @@ func (bc *Bcrypter) GenStrongFromPass(pass string) (string, error) {
 	return string(b), err
 }
 
-// CompareHashAndPass receives a hashed password and password strings, and returns an
-// error if comparison fails.
+// CompareHashAndPass returns an error if comparison fails or any error
+// encountered during handling.
 func (bc *Bcrypter) CompareHashAndPass(hash, pass string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pass))
 }
 
-// Tune wraps tune so that Bcrypter.tuningWg is surely used.
+// Tune wraps tune so that Bcrypter.tuningWg is always used.
 func (bc *Bcrypter) Tune() {
 	bc.tuningWg.Wait()
 	bc.tuningWg.Add(1)
 	bc.tune(bc.tuningWg)
 }
 
-// IsCostQuick returns the results of testHash with Bcrypter.quickCost.
+// IsCostQuick returns the result of testHash with Bcrypter.quickCost.
 func (bc *Bcrypter) IsCostQuick(hash string) error {
 	c := bc.CurrentQuickCost()
 	return testHash(hash, c)
 }
 
-// IsCostStrong returns the results of testHash with Bcrypter.strongCost.
+// IsCostStrong returns the result of testHash with Bcrypter.strongCost.
 func (bc *Bcrypter) IsCostStrong(hash string) error {
 	c := bc.CurrentStrongCost()
 	return testHash(hash, c)
 }
 
+// CurrentQuickCost returns the quickCost as set by Tune.
 func (bc *Bcrypter) CurrentQuickCost() int {
 	bc.tuningWg.Wait()
 	bc.mu.RLock()
@@ -126,6 +145,7 @@ func (bc *Bcrypter) CurrentQuickCost() int {
 	return c
 }
 
+// CurrentStrongCost returns the strongCost as set by Tune.
 func (bc *Bcrypter) CurrentStrongCost() int {
 	bc.tuningWg.Wait()
 	bc.mu.RLock()

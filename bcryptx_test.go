@@ -20,9 +20,9 @@ var (
 
 func Example() {
 	bcxOpts := &bcryptx.Options{
-		GenQuickMaxTime:  time.Millisecond * 400,
-		GenStrongMaxTime: time.Millisecond * 1600,
-		GenConcurrency:   1,
+		GenQuickMaxTime:  time.Millisecond * 400, // default is 500
+		GenStrongMaxTime: time.Millisecond * 1600, // default is 2000
+		GenConcurrency:   1, // default is 2
 	}
 
 	// To use defaults, provide nil instead of a bcryptx.Options object.

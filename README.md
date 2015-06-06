@@ -15,13 +15,13 @@ should be used when the delay of processing can be mitigated.
 type Bcrypter
     func New(opts *Options) *Bcrypter
     func (bc *Bcrypter) CompareHashAndPass(hash, pass string) error
-    func (bc *Bcrypter) CurrentQuickCost() int
-    func (bc *Bcrypter) CurrentStrongCost() int
+    func (bc *Bcrypter) CurrentQuickCost() (int, error)
+    func (bc *Bcrypter) CurrentStrongCost() (int, error)
     func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error)
     func (bc *Bcrypter) GenStrongFromPass(pass string) (string, error)
     func (bc *Bcrypter) IsCostQuick(hash string) bool
     func (bc *Bcrypter) IsCostStrong(hash string) bool
-    func (bc *Bcrypter) Tune()
+    func (bc *Bcrypter) Tune() error
     func (bc *Bcrypter) ValidateHash(hash string) error
 type Options
 ```

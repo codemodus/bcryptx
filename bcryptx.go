@@ -102,19 +102,24 @@ func (bc *Bcrypter) CompareHashAndPass(hash, pass string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pass))
 }
 
-// Tune wraps tune so that Bcrypter.tuningWg is always used.
+// Tune sets the quick and strong costs based on provided max times.
+// Appropriate costs are determined by producing a handful of low-cost hashes,
+// then using the resulting durations to interpolate the durations of hashes
+// with higher costs.
 func (bc *Bcrypter) Tune() {
 	bc.tuningWg.Wait()
 	bc.tuningWg.Add(1)
 	bc.tune(bc.tuningWg)
 }
 
-// IsCostQuick returns the result of testHash with Bcrypter.quickCost.
+// IsCostQuick returns false if the apparent cost of the hash is lower than
+// the provided cost, or if any errors are encountered during hash analysis.
 func (bc *Bcrypter) IsCostQuick(hash string) bool {
 	return testHash(hash, bc.CurrentQuickCost())
 }
 
-// IsCostStrong returns the result of testHash with Bcrypter.strongCost.
+// IsCostStrong returns false if the apparent cost of the hash is lower than
+// the provided cost, or if any errors are encountered during hash analysis.
 func (bc *Bcrypter) IsCostStrong(hash string) bool {
 	return testHash(hash, bc.CurrentStrongCost())
 }
@@ -151,7 +156,8 @@ func (bc *Bcrypter) CurrentStrongCost() int {
 	return c
 }
 
-// tune returns any test hash processing errors.
+// tune sets Bcrypter.quickCost and Bcrypter.strongCost, and panics on any
+// error or if any cost is unable to be determined.
 func (bc *Bcrypter) tune(wg *sync.WaitGroup) {
 	defer wg.Done()
 	var qc, sc int
@@ -187,6 +193,10 @@ func (bc *Bcrypter) tune(wg *sync.WaitGroup) {
 		if sc == 0 && len(cts) > k+1 && cts[k+1] > bc.options.GenStrongMaxTime {
 			sc = k
 		}
+	}
+
+	if qc == 0 || sc == 0 {
+		panic("bcrypt hash times are too low.")
 	}
 
 	bc.mu.Lock()

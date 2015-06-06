@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"errors"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -35,13 +37,13 @@ const (
 // Options holds values to be passed to New.
 type Options struct {
 	// GenQuickMaxTime is the max time used for tuning Bcrypter.quickCost.
-	GenQuickMaxTime  time.Duration
+	GenQuickMaxTime time.Duration
 
 	// GenStrongMaxTime is the max time used for tuning Bcrypter.strongCost.
 	GenStrongMaxTime time.Duration
 
 	// GenConcurrency is the goroutine count used for Gen*FromPass.
-	GenConcurrency   int
+	GenConcurrency int
 }
 
 // Bcrypter provides an API for bcrypt functions with "quick" or "strong" costs.
@@ -83,7 +85,11 @@ func New(opts *Options) *Bcrypter {
 func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error) {
 	bc.concCount <- true
 	defer func() { <-bc.concCount }()
-	b, err := bcrypt.GenerateFromPassword([]byte(pass), bc.CurrentQuickCost())
+	c, err := bc.CurrentQuickCost()
+	if err != nil {
+		return "", err
+	}
+	b, err := bcrypt.GenerateFromPassword([]byte(pass), c)
 	return string(b), err
 }
 
@@ -92,7 +98,11 @@ func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error) {
 func (bc *Bcrypter) GenStrongFromPass(pass string) (string, error) {
 	bc.concCount <- true
 	defer func() { <-bc.concCount }()
-	b, err := bcrypt.GenerateFromPassword([]byte(pass), bc.CurrentStrongCost())
+	c, err := bc.CurrentStrongCost()
+	if err != nil {
+		return "", err
+	}
+	b, err := bcrypt.GenerateFromPassword([]byte(pass), c)
 	return string(b), err
 }
 
@@ -106,59 +116,77 @@ func (bc *Bcrypter) CompareHashAndPass(hash, pass string) error {
 // Appropriate costs are determined by producing a handful of low-cost hashes,
 // then using the resulting durations to interpolate the durations of hashes
 // with higher costs.
-func (bc *Bcrypter) Tune() {
+func (bc *Bcrypter) Tune() error {
 	bc.tuningWg.Wait()
 	bc.tuningWg.Add(1)
-	bc.tune(bc.tuningWg)
+	return bc.tune(bc.tuningWg)
 }
 
 // IsCostQuick returns false if the apparent cost of the hash is lower than
 // the provided cost, or if any errors are encountered during hash analysis.
 func (bc *Bcrypter) IsCostQuick(hash string) bool {
-	return testHash(hash, bc.CurrentQuickCost())
+	c, err := bc.CurrentQuickCost()
+	if err != nil {
+		return false
+	}
+	return testHash(hash, c)
 }
 
 // IsCostStrong returns false if the apparent cost of the hash is lower than
 // the provided cost, or if any errors are encountered during hash analysis.
 func (bc *Bcrypter) IsCostStrong(hash string) bool {
-	return testHash(hash, bc.CurrentStrongCost())
+	c, err := bc.CurrentStrongCost()
+	if err != nil {
+		return false
+	}
+	return testHash(hash, c)
+}
+
+// ValidateHash returns an error if the provided argument is not a valid hash.
+func (bc *Bcrypter) ValidateHash(hash string) error {
+	_, err := bcrypt.Cost([]byte(hash))
+	return err
 }
 
 // CurrentQuickCost returns the quickCost as set by Tune.
-func (bc *Bcrypter) CurrentQuickCost() int {
+func (bc *Bcrypter) CurrentQuickCost() (int, error) {
 	bc.tuningWg.Wait()
 	bc.mu.RLock()
 	c := bc.quickCost
 	bc.mu.RUnlock()
 
 	if c == 0 {
-		bc.Tune()
+		if err := bc.Tune(); err != nil {
+			return 0, err
+		}
 		bc.mu.RLock()
 		c = bc.quickCost
 		bc.mu.RUnlock()
 	}
-	return c
+	return c, nil
 }
 
 // CurrentStrongCost returns the strongCost as set by Tune.
-func (bc *Bcrypter) CurrentStrongCost() int {
+func (bc *Bcrypter) CurrentStrongCost() (int, error) {
 	bc.tuningWg.Wait()
 	bc.mu.RLock()
 	c := bc.strongCost
 	bc.mu.RUnlock()
 
 	if c == 0 {
-		bc.Tune()
+		if err := bc.Tune(); err != nil {
+			return 0, err
+		}
 		bc.mu.RLock()
 		c = bc.strongCost
 		bc.mu.RUnlock()
 	}
-	return c
+	return c, nil
 }
 
 // tune sets Bcrypter.quickCost and Bcrypter.strongCost, and panics on any
 // error or if any cost is unable to be determined.
-func (bc *Bcrypter) tune(wg *sync.WaitGroup) {
+func (bc *Bcrypter) tune(wg *sync.WaitGroup) error {
 	defer wg.Done()
 	var qc, sc int
 
@@ -196,13 +224,14 @@ func (bc *Bcrypter) tune(wg *sync.WaitGroup) {
 	}
 
 	if qc == 0 || sc == 0 {
-		panic("bcrypt hash times are too low.")
+		return errors.New("Failed to tune bcryptx: hash times are too low.")
 	}
 
 	bc.mu.Lock()
 	bc.quickCost = qc
 	bc.strongCost = sc
 	bc.mu.Unlock()
+	return nil
 }
 
 // test returns false if the apparent cost of the hash is lower than the

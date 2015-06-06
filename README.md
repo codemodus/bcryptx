@@ -22,6 +22,7 @@ type Bcrypter
     func (bc *Bcrypter) IsCostQuick(hash string) bool
     func (bc *Bcrypter) IsCostStrong(hash string) bool
     func (bc *Bcrypter) Tune()
+    func (bc *Bcrypter) ValidateHash(hash string) error
 type Options
 ```
 
@@ -29,8 +30,6 @@ type Options
 
 ```go
 import (
-    "fmt"
-
     "github.com/codemodus/bcryptx"
 )
 
@@ -45,11 +44,13 @@ func main() {
 
     // To use defaults, provide nil instead of a bcryptx.Options object.
     bcx := bcryptx.New(bcxOpts)
-    bcx.Tune()
+	if err := bcx.Tune(); err != nil {
+		// ...
+	}
 
     hash, err := bcx.GenQuickFromPass("12345")
     if err != nil {
-        // Handler error.
+        // ...
     }
 
     // ...
@@ -62,11 +63,11 @@ func main() {
     // ...
     
     if err := bcx.CompareHashAndPass(hash, "spaceballs"); err != nil {
-        fmt.Println(`Generated hash for "12345", tested for "spaceballs".`)
+        // Generated hash for "12345", tested for "spaceballs".
     }
 
     if ok := bcx.IsCostStrong(hash); !ok {
-        fmt.Println("Hashed quick, wanted strong.")
+        // Hashed quick, wanted strong.
     }
     
     // ...

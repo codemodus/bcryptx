@@ -20,14 +20,16 @@ var (
 
 func Example() {
 	bcxOpts := &bcryptx.Options{
-		GenQuickMaxTime:  time.Millisecond * 400, // default is 500
+		GenQuickMaxTime:  time.Millisecond * 400,  // default is 500
 		GenStrongMaxTime: time.Millisecond * 1600, // default is 2000
-		GenConcurrency:   1, // default is 2
+		GenConcurrency:   1,                       // default is 2
 	}
 
 	// To use defaults, provide nil instead of a bcryptx.Options object.
 	bcx := bcryptx.New(bcxOpts)
-	bcx.Tune()
+	if err := bcx.Tune(); err != nil {
+		fmt.Println(err)
+	}
 
 	hash, err := bcx.GenQuickFromPass("12345")
 	if err != nil {
@@ -58,9 +60,15 @@ func TestNilSetupNoTuneWithHelpers(t *testing.T) {
 	}
 
 	if ok := bcx.IsCostQuick(h1); !ok {
-		t.Fatal(errors.New("cost is not quickCost"))
+		t.Fatal(errors.New("cost should be quickCost"))
+	}
+	if err := bcx.ValidateHash(h1); err != nil {
+		t.Fatal(err)
 	}
 	if ok := bcx.IsCostQuick(testPass); ok {
+		t.Fatal(errNoErr)
+	}
+	if err := bcx.ValidateHash(testPass); err == nil {
 		t.Fatal(errNoErr)
 	}
 
@@ -82,7 +90,9 @@ func TestNilSetupNoTuneWithHelpers(t *testing.T) {
 
 func TestNilSetupHashTimes(t *testing.T) {
 	bcx := bcryptx.New(nil)
-	bcx.Tune()
+	if err := bcx.Tune(); err != nil {
+		t.Fatal(err)
+	}
 
 	t1 := time.Now()
 	if _, err := bcx.GenQuickFromPass(testPass); err != nil {
@@ -125,7 +135,9 @@ func TestCustomTimeSetup(t *testing.T) {
 		}
 
 		bcx := bcryptx.New(bcxOpts)
-		bcx.Tune()
+		if err := bcx.Tune(); err != nil {
+			t.Fatal(err)
+		}
 
 		t1 := time.Now()
 		if _, err := bcx.GenQuickFromPass(testPass); err != nil {

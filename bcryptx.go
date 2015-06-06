@@ -8,7 +8,6 @@
 package bcryptx
 
 import (
-	"errors"
 	"sync"
 	"time"
 
@@ -33,11 +32,6 @@ const (
 	testStr    = "#!PnutBudr"
 )
 
-var (
-	// ErrLowCost is returned by failed IsCost* functions.
-	ErrLowCost = errors.New("Hash cost lower than currently configured cost.")
-)
-
 // Options holds values to be passed to New.
 type Options struct {
 	// GenQuickMaxTime is the max time used for tuning Bcrypter.quickCost.
@@ -55,7 +49,7 @@ type Options struct {
 type Bcrypter struct {
 	mu         *sync.RWMutex
 	tuningWg   *sync.WaitGroup
-	Options    *Options
+	options    *Options
 	quickCost  int
 	strongCost int
 	concCount  chan bool
@@ -79,7 +73,7 @@ func New(opts *Options) *Bcrypter {
 	}
 
 	return &Bcrypter{
-		Options: opts, mu: &sync.RWMutex{}, tuningWg: &sync.WaitGroup{},
+		options: opts, mu: &sync.RWMutex{}, tuningWg: &sync.WaitGroup{},
 		concCount: make(chan bool, opts.GenConcurrency),
 	}
 }
@@ -89,8 +83,7 @@ func New(opts *Options) *Bcrypter {
 func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error) {
 	bc.concCount <- true
 	defer func() { <-bc.concCount }()
-	c := bc.CurrentQuickCost()
-	b, err := bcrypt.GenerateFromPassword([]byte(pass), c)
+	b, err := bcrypt.GenerateFromPassword([]byte(pass), bc.CurrentQuickCost())
 	return string(b), err
 }
 
@@ -99,8 +92,7 @@ func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error) {
 func (bc *Bcrypter) GenStrongFromPass(pass string) (string, error) {
 	bc.concCount <- true
 	defer func() { <-bc.concCount }()
-	c := bc.CurrentStrongCost()
-	b, err := bcrypt.GenerateFromPassword([]byte(pass), c)
+	b, err := bcrypt.GenerateFromPassword([]byte(pass), bc.CurrentStrongCost())
 	return string(b), err
 }
 
@@ -118,15 +110,13 @@ func (bc *Bcrypter) Tune() {
 }
 
 // IsCostQuick returns the result of testHash with Bcrypter.quickCost.
-func (bc *Bcrypter) IsCostQuick(hash string) error {
-	c := bc.CurrentQuickCost()
-	return testHash(hash, c)
+func (bc *Bcrypter) IsCostQuick(hash string) bool {
+	return testHash(hash, bc.CurrentQuickCost())
 }
 
 // IsCostStrong returns the result of testHash with Bcrypter.strongCost.
-func (bc *Bcrypter) IsCostStrong(hash string) error {
-	c := bc.CurrentStrongCost()
-	return testHash(hash, c)
+func (bc *Bcrypter) IsCostStrong(hash string) bool {
+	return testHash(hash, bc.CurrentStrongCost())
 }
 
 // CurrentQuickCost returns the quickCost as set by Tune.
@@ -191,10 +181,10 @@ func (bc *Bcrypter) tune(wg *sync.WaitGroup) {
 	}
 
 	for k := range cts {
-		if qc == 0 && len(cts) > k+1 && cts[k+1] > bc.Options.GenQuickMaxTime {
+		if qc == 0 && len(cts) > k+1 && cts[k+1] > bc.options.GenQuickMaxTime {
 			qc = k
 		}
-		if sc == 0 && len(cts) > k+1 && cts[k+1] > bc.Options.GenStrongMaxTime {
+		if sc == 0 && len(cts) > k+1 && cts[k+1] > bc.options.GenStrongMaxTime {
 			sc = k
 		}
 	}
@@ -205,15 +195,12 @@ func (bc *Bcrypter) tune(wg *sync.WaitGroup) {
 	bc.mu.Unlock()
 }
 
-// test returns an error if the apparent cost of the hash is lower than the
+// test returns false if the apparent cost of the hash is lower than the
 // provided cost, or if any errors are encountered during hash analysis.
-func testHash(hash string, cost int) error {
+func testHash(hash string, cost int) bool {
 	c, err := bcrypt.Cost([]byte(hash))
-	if err != nil {
-		return err
+	if err != nil || c < cost {
+		return false
 	}
-	if c < cost {
-		return ErrLowCost
-	}
-	return nil
+	return true
 }

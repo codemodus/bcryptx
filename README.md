@@ -19,8 +19,8 @@ type Bcrypter
     func (bc *Bcrypter) CurrentStrongCost() int
     func (bc *Bcrypter) GenQuickFromPass(pass string) (string, error)
     func (bc *Bcrypter) GenStrongFromPass(pass string) (string, error)
-    func (bc *Bcrypter) IsCostQuick(hash string) error
-    func (bc *Bcrypter) IsCostStrong(hash string) error
+    func (bc *Bcrypter) IsCostQuick(hash string) bool
+    func (bc *Bcrypter) IsCostStrong(hash string) bool
     func (bc *Bcrypter) Tune()
 type Options
 ```
@@ -65,7 +65,7 @@ func main() {
         fmt.Println(`Generated hash for "12345", tested for "spaceballs".`)
     }
 
-    if err := bcx.IsCostStrong(hash); err != nil {
+    if ok := bcx.IsCostStrong(hash); !ok {
         fmt.Println("Hashed quick, wanted strong.")
     }
     

@@ -38,7 +38,7 @@ func Example() {
 		fmt.Println(`Generated hash for "12345", tested for "spaceballs".`)
 	}
 
-	if err := bcx.IsCostStrong(hash); err != nil {
+	if ok := bcx.IsCostStrong(hash); !ok {
 		fmt.Println("Hashed quick, wanted strong.")
 	}
 
@@ -56,10 +56,11 @@ func TestNilSetupNoTuneWithHelpers(t *testing.T) {
 	if err = bcx.CompareHashAndPass(h1, testPass); err != nil {
 		t.Fatal(err)
 	}
-	if err = bcx.IsCostQuick(h1); err != nil {
-		t.Fatal(err)
+
+	if ok := bcx.IsCostQuick(h1); !ok {
+		t.Fatal(errors.New("cost is not quickCost"))
 	}
-	if err = bcx.IsCostQuick(testPass); err == nil {
+	if ok := bcx.IsCostQuick(testPass); ok {
 		t.Fatal(errNoErr)
 	}
 
@@ -71,10 +72,10 @@ func TestNilSetupNoTuneWithHelpers(t *testing.T) {
 	if err = bcx.CompareHashAndPass(h2, testPass); err != nil {
 		t.Fatal(err)
 	}
-	if err = bcx.IsCostStrong(h2); err != nil {
+	if ok := bcx.IsCostStrong(h2); !ok {
 		t.Fatal(err)
 	}
-	if err = bcx.IsCostStrong(h1); err == nil {
+	if ok := bcx.IsCostStrong(h1); ok {
 		t.Fatal(errNoErr)
 	}
 }

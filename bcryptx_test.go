@@ -49,7 +49,7 @@ func Example() {
 	// Hashed quick, wanted strong.
 }
 
-func TestNilSetupNoTuneWithHelpers(t *testing.T) {
+func TestNilSetupNoTune(t *testing.T) {
 	bcx := bcryptx.New(nil)
 	h1, err := bcx.GenQuickFromPass(testPass)
 	if err != nil {
@@ -88,44 +88,16 @@ func TestNilSetupNoTuneWithHelpers(t *testing.T) {
 	}
 }
 
-func TestNilSetupHashTimes(t *testing.T) {
-	bcx := bcryptx.New(nil)
-	if err := bcx.Tune(); err != nil {
-		t.Fatal(err)
-	}
-
-	t1 := time.Now()
-	if _, err := bcx.GenQuickFromPass(testPass); err != nil {
-		t.Fatal(err)
-	}
-	got := time.Since(t1)
-
-	wantLow := bcryptx.GenQuickMaxTime / 2
-	wantHigh := bcryptx.GenQuickMaxTime
-	if got < wantLow || got > wantHigh {
-		t.Errorf(errFmtGotWant, got, wantLow, wantHigh)
-	}
-
-	t1 = time.Now()
-	if _, err := bcx.GenStrongFromPass(testPass); err != nil {
-		t.Fatal(err)
-	}
-	got = time.Since(t1)
-
-	wantLow = bcryptx.GenStrongMaxTime / 2
-	wantHigh = bcryptx.GenStrongMaxTime
-	if got < wantLow || got > wantHigh {
-		t.Errorf(errFmtGotWant, got, wantLow, wantHigh)
-	}
-}
-
 func TestCustomTimeSetup(t *testing.T) {
 	var tests = []struct {
-		qt time.Duration
-		st time.Duration
+		qt  time.Duration
+		st  time.Duration
+		exc bool
 	}{
-		{time.Millisecond * 50, time.Millisecond * 200},
-		{time.Millisecond * 200, time.Millisecond * 800},
+		{time.Millisecond * 50, time.Millisecond * 200, false},
+		{time.Millisecond * 200, time.Millisecond * 800, false},
+		{bcryptx.GenQuickMaxTime, bcryptx.GenStrongMaxTime, false},
+		{time.Millisecond * 999999999, time.Millisecond * 999999999, true},
 	}
 
 	for _, v := range tests {
@@ -135,32 +107,56 @@ func TestCustomTimeSetup(t *testing.T) {
 		}
 
 		bcx := bcryptx.New(bcxOpts)
-		if err := bcx.Tune(); err != nil {
+		err := bcx.Tune()
+		if !v.exc && err != nil {
 			t.Fatal(err)
+		}
+		if v.exc && err == nil {
+			t.Error(errNoErr)
+		}
+
+		if v.exc {
+			if ok := bcx.IsCostQuick(""); ok {
+				t.Fatal("should not be ok")
+			}
+			if ok := bcx.IsCostStrong(""); ok {
+				t.Fatal("should not be ok")
+			}
 		}
 
 		t1 := time.Now()
-		if _, err := bcx.GenQuickFromPass(testPass); err != nil {
+		_, err = bcx.GenQuickFromPass(testPass)
+		if !v.exc && err != nil {
 			t.Fatal(err)
 		}
-		got := time.Since(t1)
+		if v.exc && err == nil {
+				t.Error(errNoErr)
+		}
+		got1 := time.Since(t1)
+
+		t2 := time.Now()
+		_, err = bcx.GenStrongFromPass(testPass)
+		if !v.exc && err != nil {
+			t.Fatal(err)
+		}
+		if v.exc {
+			if err == nil {
+				t.Error(errNoErr)
+			}
+			continue
+		}
+		got2 := time.Since(t2)
 
 		wantLow := v.qt / 2
 		wantHigh := v.qt
-		if got < wantLow || got > wantHigh {
-			t.Errorf(errFmtGotWant, got, wantLow, wantHigh)
+		if got1 < wantLow || got1 > wantHigh {
+			t.Errorf(errFmtGotWant, got1, wantLow, wantHigh)
 		}
-
-		t1 = time.Now()
-		if _, err := bcx.GenStrongFromPass(testPass); err != nil {
-			t.Fatal(err)
-		}
-		got = time.Since(t1)
 
 		wantLow = v.st / 2
 		wantHigh = v.st
-		if got < wantLow || got > wantHigh {
-			t.Errorf(errFmtGotWant, got, wantLow, wantHigh)
+		if got2 < wantLow || got2 > wantHigh {
+			t.Errorf(errFmtGotWant, got2, wantLow, wantHigh)
 		}
 	}
 }
